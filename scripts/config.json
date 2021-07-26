@@ -1,0 +1,12 @@
+{
+	"api": "https://domain/api/v1/",
+	"eventsUrl": "wss://domain/events",
+	"debug": "false",
+	"publicRegisterEnabled": true,
+	"feedbackEnabled": true,
+	"privacyPolicyUrl": null,
+	"termsOfServiceUrl": null,
+	"GDPRUrl": null,
+	"maxUploadFileSize": null,
+	"contribPlugins": []
+}

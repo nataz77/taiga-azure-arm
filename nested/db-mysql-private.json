@@ -1,0 +1,156 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2014-04-01-preview/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "moodleCommon": {
+            "metadata": {
+                "description": "Common Moodle values"
+            },
+            "type": "object"
+        },
+        "subnetIdPrivateEndpoint": {
+            "metadata": {
+                "description": "Subnet Id Private Endpoint"
+            },
+            "type": "string"
+        },
+        "subnetIdWeb": {
+            "metadata": {
+                "description": "Subnet web vmss"
+            },
+            "type": "string"
+        },
+        "vNetName": {
+            "metadata": {
+                "description": "VirtualNet name values"
+            },
+            "type": "string"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.DBforMySQL/servers",
+            "apiVersion": "2017-12-01",
+            "kind": "",
+            "location": "[parameters('moodleCommon').location]",
+            "name": "[parameters('moodleCommon').serverName]",
+            "properties": {
+                "administratorLogin": "[parameters('moodleCommon').dbLogin]",
+                "administratorLoginPassword": "[parameters('moodleCommon').dbLoginPassword]",
+                "sslEnforcement": "[parameters('moodleCommon').sslEnforcement]",
+                "publicNetworkAccess": "Disabled",
+                "storageProfile": {
+                    "storageMB": "[mul(parameters('moodleCommon').mysqlPgresStgSizeGB, 1024)]",
+                    "backupRetentionDays": "35",
+                    "geoRedundantBackup": "Enabled"
+                },
+                "version": "[parameters('moodleCommon').mysqlVersion]"
+            },
+            "sku": {
+                "capacity": "[parameters('moodleCommon').mysqlPgresVcores]",
+                "name": "[parameters('moodleCommon').mysqlPgresSkuName]",
+                "tier": "[parameters('moodleCommon').mysqlPgresSkuTier]",
+                "family": "[parameters('moodleCommon').mysqlPgresSkuHwFamily]"
+            },
+            "resources": [
+            ]
+        },
+        {
+            "type": "Microsoft.Network/privateEndpoints",
+            "apiVersion": "2020-05-01",
+            "name": "[parameters('moodleCommon').mysqlPrivateEndpointName]",
+            "location": "[parameters('moodleCommon').location]",
+            "dependsOn": [
+                "[variables('mysqlserverResourceID')]"
+            ],
+            "properties": {
+                "privateLinkServiceConnections": [
+                    {
+                        "name": "[parameters('moodleCommon').mysqlPrivateEndpointName]",
+                        "properties": {
+                            "privateLinkServiceId": "[variables('mysqlserverResourceID')]",
+                            "groupIds": [
+                                "mysqlServer"
+                            ]
+                        }
+                    }
+                ],
+                "subnet": {
+                    "id": "[parameters('subnetIdPrivateEndpoint')]"
+                },
+                "customDnsConfigs": [
+
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones",
+            "apiVersion": "2018-09-01",
+            "name": "[parameters('moodleCommon').mysqlPrivateDnsZoneName]",
+            "location": "global",
+            "properties": {
+               "maxNumberOfRecordSets": 25000,
+                "maxNumberOfVirtualNetworkLinks": 1000,
+                "maxNumberOfVirtualNetworkLinksWithRegistration": 100
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+            "apiVersion": "2018-09-01",
+            "name": "[concat(parameters('moodleCommon').mysqlPrivateDnsZoneName, '/', parameters('vNetName'))]",
+            "location": "global",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', parameters('moodleCommon').mysqlPrivateDnsZoneName)]"
+            ],
+            "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                    "id": "[variables('vnetId')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+            "apiVersion": "2020-05-01",
+            "name": "[concat(parameters('moodleCommon').mysqlPrivateEndpointName, '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', parameters('moodleCommon').mysqlPrivateEndpointName)]",
+                "[resourceId('Microsoft.Network/privateDnsZones', parameters('moodleCommon').mysqlPrivateDnsZoneName)]"
+
+            ],
+            "properties": {
+                "privateDnsZoneConfigs": [
+                    {
+                        "name": "privatelink-mysql-database-azure-com",
+                        "properties": {
+                            "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', parameters('moodleCommon').mysqlPrivateDnsZoneName)]"
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {
+        "dbFQDN": {
+            "type": "string",
+            "value": "[reference(parameters('moodleCommon').serverName).fullyQualifiedDomainName]"
+        }
+    },
+    "variables": {
+        "documentation1": "This sub-template creates a mysql server.  It expects certain values in the 'common' datastructure.",
+        "documentation10": " serverName                 - Mysql server name",
+        "documentation11": " mysqlVersion               - Mysql version",
+        "documentation2": " administratorLogin          - mysql admin username",
+        "documentation3": " administratorLoginPassword  - mysql admin password",
+        "documentation4": " location                    - Mysql server location",
+        "documentation5": " mysqlPgresVcores            - Mysql database trasaction units",
+        "documentation7": " mysqlPgresSkuName           - Mysql sku name",
+        "documentation8": " mysqlPgresStgSizeGB         - Mysql sku size in mb",
+        "documentation9": " mysqlPgresSkuTier           - Mysql sku tier",
+        "documentationA": " mysqlPgresSkuHwFamily       - Mysql sku hardware family",
+        "mysqlserverResourceID": "[resourceId('Microsoft.DBforMySQL/servers', parameters('moodleCommon').serverName)]",
+        "privateEndpointsId": "[resourceId('Microsoft.Network/privateEndpoints', parameters('moodleCommon').mysqlPrivateEndpointName)]",
+        "vnetId" : "[if(equals(parameters('moodleCommon').customVnetId, ''), resourceId('Microsoft.Network/virtualNetworks', parameters('vNetName')), parameters('moodleCommon').customVnetId)]"
+
+    }
+}

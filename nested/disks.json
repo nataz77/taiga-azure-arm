@@ -1,0 +1,104 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "moodleCommon": {
+            "metadata": {
+                "description": "Common Moodle values"
+            },
+            "type": "object"
+        },
+         "osDiskVhdUri": {
+            "metadata": {
+                "description": "Uri vhd disk for vmss"
+            },
+            "type": "string"
+        },
+         "controllerOsDiskVhdUri": {
+            "metadata": {
+                "description": "Uri vhd disk for controllervm"
+            },
+            "type": "string"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Compute/disks",
+            "apiVersion": "2018-09-30",
+            "name": "[parameters('moodleCommon').osDiskVhdName]",
+            "location": "[parameters('moodleCommon').location]",
+            "properties": {
+                "creationData": {
+                    "createOption": "Import",
+                    "sourceUri": "[parameters('osDiskVhdUri')]"
+                },
+                "osType": "Linux"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/disks",
+            "apiVersion": "2018-09-30",
+            "name": "[parameters('moodleCommon').controllerosDiskVhdName]",
+            "location": "[parameters('moodleCommon').location]",
+            "properties": {
+                "creationData": {
+                    "createOption": "Import",
+                    "sourceUri": "[parameters('controllerOsDiskVhdUri')]"
+                },
+                "osType": "Linux"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/images",
+            "apiVersion": "2020-12-01",
+            "name": "[parameters('moodleCommon').osDiskVhdimageReference]",
+            "location": "[parameters('moodleCommon').location]",
+            "dependsOn":[
+                "[resourceId('Microsoft.Compute/disks', parameters('moodleCommon').osDiskVhdName)]"
+            ],
+            "properties": {
+                "storageProfile": {
+                    "osDisk": {
+                        "osType": "Linux",
+                        "managedDisk": {
+                        "id": "[resourceId('Microsoft.Compute/disks', parameters('moodleCommon').osDiskVhdName)]"
+                        },
+                        "osState": "Generalized"
+                    },
+                    "zoneResilient": true
+                },
+                "hyperVGeneration": "V2"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/images",
+            "apiVersion": "2020-12-01",
+            "name": "[parameters('moodleCommon').osDiskVhdimageControllerReference]",
+            "location": "[parameters('moodleCommon').location]",
+            "dependsOn":[
+                "[resourceId('Microsoft.Compute/disks', parameters('moodleCommon').controllerosDiskVhdName)]"
+            ],
+            "properties": {
+                "storageProfile": {
+                    "osDisk": {
+                        "osType": "Linux",
+                        "managedDisk": {
+                        "id": "[resourceId('Microsoft.Compute/disks', parameters('moodleCommon').controllerosDiskVhdName)]"
+                        },
+                        "osState": "Generalized"
+                    },
+                    "zoneResilient": true
+                },
+                "hyperVGeneration": "V2"
+            }
+        }
+        
+    ],
+    "variables": {
+        "documentation01": "This sub-template creates a managed disk from vhd"
+       
+    },
+    "outputs": {
+        
+    }
+}

@@ -1,0 +1,160 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "moodleCommon": {
+            "metadata": {
+                "description": "Common Moodle values"
+            },
+            "type": "object"
+        },
+        "subnetIdPrivateEndpoint": {
+            "metadata": {
+                "description": "Subnet privateendpoint"
+            },
+            "type": "string"
+        },
+        "subnetIdWeb": {
+            "metadata": {
+                "description": "Subnet web vmss"
+            },
+            "type": "string"
+        },
+        "vNetName": {
+            "metadata": {
+                "description": "VirtualNet name values"
+            },
+            "type": "string"
+        }       
+    },
+    "resources": [
+        {
+            "condition": "[equals(parameters('moodleCommon').fileServerType, 'azurefiles')]",
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "location": "[parameters('moodleCommon').location]",
+            "name": "[concat(parameters('moodleCommon').storageAccountName)]",
+            "kind": "[if(equals(parameters('moodleCommon').storageAccountType, 'Premium_LRS'), 'FileStorage', 'StorageV2')]",
+            "sku": {
+                "name": "[parameters('moodleCommon').storageAccountType]"
+            },
+            "properties": {
+                "largeFileSharesState": "Enabled",
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": true,
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Deny"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateEndpoints",
+            "apiVersion": "2020-04-01",
+            "name": "[parameters('moodleCommon').storageAccountPrivateEndpointName]",
+            "location": "[parameters('moodleCommon').location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('moodleCommon').storageAccountName)]"
+            ],
+            "properties": {
+                "privateLinkServiceConnections": [
+                    {
+                        "name": "[parameters('moodleCommon').storageAccountPrivateEndpointName]",
+                        "properties": {
+                            "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('moodleCommon').storageAccountName)]",
+                            "groupIds": [
+                                "file"
+                            ]
+                        }
+                    }
+                ],
+                "subnet": {
+                    "id": "[parameters('subnetIdPrivateEndpoint')]"
+                },
+                "customDnsConfigs": [
+                   
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones",
+            "apiVersion": "2018-09-01",
+            "name": "[parameters('moodleCommon').storageAccountPrivateFileDnsZoneName]",
+            "location": "global",
+            "properties": {
+               "maxNumberOfRecordSets": 25000,
+                "maxNumberOfVirtualNetworkLinks": 1000,
+                "maxNumberOfVirtualNetworkLinksWithRegistration": 100
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+            "apiVersion": "2018-09-01",
+            "name": "[concat(parameters('moodleCommon').storageAccountPrivateFileDnsZoneName, '/', parameters('vNetName'))]",
+            "location": "global",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', parameters('moodleCommon').storageAccountPrivateFileDnsZoneName)]"
+            ],
+            "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                    "id": "[variables('vnetId')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+            "apiVersion": "2020-05-01",
+            "name": "[concat(parameters('moodleCommon').storageAccountPrivateEndpointName, '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', parameters('moodleCommon').storageAccountPrivateEndpointName)]",
+                "[resourceId('Microsoft.Network/privateDnsZones', parameters('moodleCommon').storageAccountPrivateFileDnsZoneName)]"
+
+            ],
+            "properties": {
+                "privateDnsZoneConfigs": [
+                    {
+                        "name": "privatelink-file-core-windows-net",
+                        "properties": {
+                            "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', parameters('moodleCommon').storageAccountPrivateFileDnsZoneName)]"
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "variables": {
+        "documentation1": "This sub-template creates a storage account.  It expects certain values in the 'common' datastructure.",
+        "documentation2": " storageAccountName - name of storage account",
+        "documentation3": " storageAccountType - type of storage account",
+        "storageName": "[parameters('moodleCommon').storageAccountName]",
+        "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]",
+        "vnetId" : "[if(equals(parameters('moodleCommon').customVnetId, ''), resourceId('Microsoft.Network/virtualNetworks', parameters('vNetName')), parameters('moodleCommon').customVnetId)]"
+    },
+    "outputs": {
+        "storageAccountKey": {
+            "value": "[listKeys(variables('storageAccountId'), '2019-06-01').keys[0].value]",
+            "type": "string"
+        },
+        "storageAccountName": {
+            "value": "[variables('storageName')]",
+            "type": "string"
+        }
+    }
+}
